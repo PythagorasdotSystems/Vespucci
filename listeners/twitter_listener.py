@@ -27,49 +27,50 @@ class Listener(StreamListener):
 
         self.symbol = symbol
 
-        self.time = time.time()
-        self.limit = time_limit
+        #self.time = time.time()
+        #self.limit = time_limit
 
     def on_data(self, data):
-        while (time.time() - self.time) < self.limit:
-            data = json.loads(data)
-            
-            if 'extended_tweet' in data:
-                tweet_txt = data['extended_tweet']['full_text']
-            else:
-                tweet_txt = data['text']
-            tweet_txt.replace('\n', ' ').replace('\r', '')
+        #while (time.time() - self.time) < self.limit:
+        data = json.loads(data)
 
-            snt = analyser.polarity_scores(tweet_txt)
-            
-            #data['timestamp_ms'] , data['user']['location']
-            row = [data['user']['name'], tweet_txt, data['retweet_count'], 
-                    data["created_at"], data['user']['followers_count'], 
-                    data['user']['friends_count'], snt['compound']]
-            print(tweet_txt)
-            with open(fname, 'a') as f:
-                writer = csv.writer(f)
-                writer.writerow(row)
+        if 'extended_tweet' in data:
+            tweet_txt = data['extended_tweet']['full_text']
+        else:
+            tweet_txt = data['text']
+        tweet_txt.replace('\n', ' ').replace('\r', '')
 
-            # insert to Test db
-            self.cnxn.execute('INSERT INTO Test(Symbol,userName,TweetText,location,ScoreA) VALUES (?,?,?,?,?)',
-                    self.symbol,
-                    self._str_to_utf16le(data['user']['name']),
-                    self._str_to_utf16le(tweet_txt),
-                    self._str_to_utf16le(data['user']['location']),
-                    float(snt['compound']))
-            self.cnxn.commit()
+        snt = analyser.polarity_scores(tweet_txt)
 
-            return True
+        #row = [data['user']['name'], tweet_txt, data['retweet_count'],
+        #        data["created_at"], data['user']['followers_count'],
+        #        data['user']['friends_count'], snt['compound']]
+        #print(tweet_txt)
+        #with open(fname, 'a') as f:
+        #    writer = csv.writer(f)
+        #    writer.writerow(row)
+
+        # insert to Test db
+        self.cnxn.execute('INSERT INTO Test(Symbol,userName,TweetText,location,ScoreA) VALUES (?,?,?,?,?)',
+                self.symbol,
+                self._str_to_utf16le(data['user']['name']),
+                self._str_to_utf16le(tweet_txt),
+                self._str_to_utf16le(data['user']['location']),
+                float(snt['compound']))
+        self.cnxn.commit()
+
+        return True
 
         # if time to sleep -> close DB
-        self.cnxn.commit()
-        self.cnxn.close()
-        return False
+        #self.cnxn.commit()
+        #self.cnxn.close()
+        #return False
 
     def on_error(self, status):
         logger.error('Listener: on_error' + " " + str(status))
         #print('on_error::' + str(status))
+        self.cnxn.commit()
+        self.cnxn.close()
         return False
 
     def _str_to_utf16le(self, s):
@@ -124,14 +125,15 @@ auth.set_access_token(access_token, access_token_secret)
 
 logger.info('Start listener for bitcoin')
 
-with open(fname, 'w') as f:
-    writer = csv.writer(f)
-    writer.writerow(["User", "Text", "Retweets","Created_at","Followers_count","Friends_count","VADER"])
+#with open(fname, 'w') as f:
+#    writer = csv.writer(f)
+#    writer.writerow(["User", "Text", "Retweets","Created_at","Followers_count","Friends_count","VADER"])
 
 analyser = SentimentIntensityAnalyzer()
 
 while(1):
-    # example: stream BTC, get sentiment score for each tweet using VADER and insert result to DB 
+    # example:  continuous stream for BTC tweets, compute sentiment score for each tweet using VADER and insert result to DB
+    #           if any error sleep 15' and try again
     try:
         logger.info('Listening BTC...')
         l = Listener(symbol = 'BTC')
@@ -139,4 +141,4 @@ while(1):
         stream.filter(track=['bitcoin'], languages=['en'])
     except Exception as e:
         logger.error('Listening error -> sleep, ' + traceback.format_exc())
-        time.sleep(60*15)
+    time.sleep(60*15)
